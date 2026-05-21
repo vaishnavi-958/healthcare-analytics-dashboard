@@ -1,0 +1,121 @@
+# =============================================================================
+# GitHub Actions CI — Healthcare Analytics Dashboard
+# =============================================================================
+# Runs on every push and pull request to main/master.
+# Pipeline steps:
+#   1. Set up Python 3.11
+#   2. Install dependencies
+#   3. Validate the dataset (shape, required columns, no fully-empty rows)
+#   4. Run the statistical analysis report
+#   5. Run the ML model training & evaluation report
+#   6. Lint with flake8 (warnings only — does not fail the build)
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  validate-and-analyse:
+    name: Validate Dataset & Run Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ─────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: healthcare_analytics/requirements.txt
+
+      # ── 3. Install dependencies ───────────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r healthcare_analytics/requirements.txt
+
+      # ── 4. Validate dataset ───────────────────────────────────────────────
+      - name: Validate dataset integrity
+        run: |
+          python - <<'EOF'
+          import pandas as pd
+          import sys
+
+          CSV = "healthcare_analytics/data/healthcare_data.csv"
+          REQUIRED_COLUMNS = [
+              "Patient Id", "Patient Admission Date", "Patient Admission Time",
+              "Merged", "Patient Gender", "Patient Age", "Patient Race",
+              "Department Referral", "Patient Admission Flag",
+              "Patient Satisfaction Score", "Patient Waittime",
+          ]
+
+          print("Loading dataset...")
+          df = pd.read_csv(CSV)
+
+          # Shape check
+          rows, cols = df.shape
+          print(f"  Rows: {rows:,}  |  Columns: {cols}")
+          assert rows > 0, "Dataset is empty!"
+          assert cols == len(REQUIRED_COLUMNS), (
+              f"Expected {len(REQUIRED_COLUMNS)} columns, got {cols}"
+          )
+
+          # Column presence
+          missing_cols = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+          assert not missing_cols, f"Missing columns: {missing_cols}"
+          print("  All required columns present.")
+
+          # No fully-empty rows
+          fully_empty = df.isnull().all(axis=1).sum()
+          assert fully_empty == 0, f"{fully_empty} fully-empty rows found!"
+          print("  No fully-empty rows.")
+
+          # Wait time is always present
+          null_wait = df["Patient Waittime"].isnull().sum()
+          assert null_wait == 0, f"Wait time has {null_wait} missing values!"
+          print(f"  Wait time complete (0 missing).")
+
+          # Age sanity
+          assert df["Patient Age"].between(0, 120).all(), "Age values out of range [0, 120]!"
+          print(f"  Age values all in range [0, 120].")
+
+          # Admission flag values
+          valid_flags = {"Admission", "Not Admission"}
+          actual_flags = set(df["Patient Admission Flag"].unique())
+          assert actual_flags <= valid_flags, f"Unexpected admission flags: {actual_flags - valid_flags}"
+          print(f"  Admission flags valid: {actual_flags}")
+
+          print("\nDataset validation PASSED.")
+          EOF
+
+      # ── 5. Run statistical analysis ───────────────────────────────────────
+      - name: Run data analysis report
+        working-directory: healthcare_analytics
+        run: python analysis/data_analysis.py
+
+      # ── 6. Run ML analysis ────────────────────────────────────────────────
+      - name: Run ML model report
+        working-directory: healthcare_analytics
+        run: python analysis/ml_analysis.py
+
+      # ── 7. Lint (warnings only) ───────────────────────────────────────────
+      - name: Lint with flake8
+        run: |
+          pip install flake8 --quiet
+          # E501 = line too long (ignored for data science notebooks style)
+          # W503 = line break before binary operator (style preference)
+          flake8 healthcare_analytics/ \
+            --max-line-length=120 \
+            --extend-ignore=E501,W503,E302,W291 \
+            --exclude=healthcare_analytics/.github \
+            --statistics \
+            || true

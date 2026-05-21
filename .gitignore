@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+.Python
+env/
+venv/
+.venv/
+pip-wheel-metadata/
+
+# Virtual environments
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter / IPython
+.ipynb_checkpoints
+*.ipynb
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Distribution / packaging
+*.manifest
+*.spec
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Data (exclude large raw files if needed; keep sample data in repo)
+# data/*.csv  # Uncomment if you don't want to commit raw data
+
+# Screenshots (generated at runtime)
+screenshots/*.png
+screenshots/*.jpg
